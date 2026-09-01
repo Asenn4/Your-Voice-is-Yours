@@ -9,11 +9,12 @@ def patched_torch_load(*args, **kwargs):
     return original_torch_load(*args, **kwargs)
 torch.load = patched_torch_load
 
-# pyrefly: ignore [missing-import]
+# pyright: ignore [reportMissingImports]
 from rvc_python.infer import RVCInference
 
 # Inisialisasi Engine RVC
-rvc = RVCInference()
+device = "cuda:0" if torch.cuda.is_available() else "cpu:0"
+rvc = RVCInference(device=device)
 
 def get_model_version(model_path):
     try:
