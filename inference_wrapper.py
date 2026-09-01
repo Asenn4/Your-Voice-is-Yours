@@ -13,8 +13,17 @@ torch.load = patched_torch_load
 from rvc_python.infer import RVCInference
 
 # Inisialisasi Engine RVC
-device = "cuda:0" if torch.cuda.is_available() else "cpu:0"
-rvc = RVCInference(device=device)
+current_device = "cuda:0" if torch.cuda.is_available() else "cpu:0"
+rvc = RVCInference(device=current_device)
+
+def set_device(use_gpu: bool):
+    global rvc, current_device
+    new_device = "cuda:0" if use_gpu and torch.cuda.is_available() else "cpu:0"
+    if current_device != new_device:
+        current_device = new_device
+        rvc = RVCInference(device=current_device)
+        return True # Mengindikasikan device berubah, perlu load model lagi
+    return False
 
 def get_model_version(model_path):
     try:

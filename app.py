@@ -13,6 +13,7 @@ for directory in [MODELS_DIR, INPUT_DIR, OUTPUT_DIR]:
 
 st.set_page_config(page_title="AI Cover Studio", page_icon="🎤", layout="wide")
 
+
 @st.dialog("➕ Tambah Model Baru")
 def tambah_model_dialog():
     with st.form("tambah_model_form", clear_on_submit=True):
@@ -52,6 +53,19 @@ st.title("🎤 AI Song Cover Studio")
 left_col, right_col = st.columns(2, gap="large")
 
 with left_col:
+    st.subheader("💻 Pengaturan Hardware")
+    import torch
+    gpu_available = torch.cuda.is_available()
+    
+    if not gpu_available:
+        use_gpu = st.toggle("🚀 Gunakan GPU (Disarankan)", value=False, disabled=True, help="GPU tidak terdeteksi.")
+    else:
+        use_gpu = st.toggle("🚀 Gunakan GPU (Disarankan)", value=True, help="Matikan untuk menggunakan CPU secara paksa.")
+    
+    changed = inference_wrapper.set_device(use_gpu)
+    if changed:
+        st.warning("⚠️ Hardware diubah. Silakan klik 'Load ke Mesin' lagi.")
+
     st.subheader("⚙️ 1. Pengaturan Model")
     
     # Tombol Tambah Model (Popup)
