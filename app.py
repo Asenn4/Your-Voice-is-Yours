@@ -11,16 +11,21 @@ for directory in [MODELS_DIR, INPUT_DIR, OUTPUT_DIR]:
     if not os.path.exists(directory):
         os.makedirs(directory)
 
-st.set_page_config(page_title="AI Cover Studio", page_icon="🎤", layout="wide")
+st.set_page_config(page_title="AI Cover Studio", page_icon="", layout="wide")
+
+if 'loaded_model' not in st.session_state:
+    st.session_state.loaded_model = None
+if 'selected_model' not in st.session_state:
+    st.session_state.selected_model = None
 
 
 @st.dialog("➕ Tambah Model Baru")
 def tambah_model_dialog():
     with st.form("tambah_model_form", clear_on_submit=True):
         new_model_name = st.text_input("Nama Model (Pisahkan dengan spasi atau underscore)")
-        new_pth = st.file_uploader("Upload File Model (.pth) [Wajib]", type=['pth'])
-        new_index = st.file_uploader("Upload File Index (.index) [Opsional]", type=['index'])
-        new_image = st.file_uploader("Upload Gambar Cover (.png / .jpg) [Opsional]", type=['png', 'jpg', 'jpeg'])
+        new_pth = st.file_uploader("Upload File Model (.pth)", type=['pth'])
+        new_index = st.file_uploader("Upload File Index (.index)", type=['index'])
+        new_image = st.file_uploader("Upload Gambar Cover (.png / .jpg)", type=['png', 'jpg', 'jpeg'])
         
         submit_btn = st.form_submit_button("Simpan Model")
         if submit_btn:
@@ -53,18 +58,19 @@ st.title("🎤 AI Song Cover Studio")
 left_col, right_col = st.columns(2, gap="large")
 
 with left_col:
-    st.subheader("💻 Pengaturan Hardware")
+    st.subheader(" Pengaturan Hardware")
     import torch
     gpu_available = torch.cuda.is_available()
     
     if not gpu_available:
-        use_gpu = st.toggle("🚀 Gunakan GPU (Disarankan)", value=False, disabled=True, help="GPU tidak terdeteksi.")
+        use_gpu = st.toggle(" Gunakan GPU (Disarankan)", value=False, disabled=True, help="GPU tidak terdeteksi.")
     else:
-        use_gpu = st.toggle("🚀 Gunakan GPU (Disarankan)", value=True, help="Matikan untuk menggunakan CPU secara paksa.")
+        use_gpu = st.toggle(" Gunakan GPU (Disarankan)", value=True, help="Otomatis Menyala jika GPU terdeteksi.")
     
     changed = inference_wrapper.set_device(use_gpu)
     if changed:
-        st.warning("⚠️ Hardware diubah. Silakan klik 'Load ke Mesin' lagi.")
+        st.session_state.loaded_model = None
+        st.toast("⚙️ Hardware diubah. Menyiapkan ulang model...")
 
     st.subheader("⚙️ 1. Pengaturan Model")
     
@@ -77,56 +83,15 @@ with left_col:
     # Load Model (Deteksi folder)
     available_models = [d for d in os.listdir(MODELS_DIR) if os.path.isdir(os.path.join(MODELS_DIR, d))]
     
-    if 'selected_model' not in st.session_state:
-        st.session_state.selected_model = None
 
     if available_models and st.session_state.selected_model not in available_models:
         st.session_state.selected_model = available_models[0]
 
     if available_models:
-        st.markdown("### Pilih Model:")
-        
-        # Buat grid 3 kolom
-        cols = st.columns(3)
-        for idx, model_name in enumerate(available_models):
-            with cols[idx % 3]:
-                model_folder = os.path.join(MODELS_DIR, model_name)
-                cover_image = None
-                for file in os.listdir(model_folder):
-                    if file.startswith("cover."):
-                        cover_image = os.path.join(model_folder, file)
-                        break
-                
-                is_selected = (st.session_state.selected_model == model_name)
-                
-                # Tampilkan Cover
-                if cover_image:
-                    import base64
-                    with open(cover_image, "rb") as f:
-                        b64 = base64.b64encode(f.read()).decode()
-                    ext = cover_image.split('.')[-1]
-                    st.markdown(f'<div style="text-align: center;"><img src="data:image/{ext};base64,{b64}" width="120" style="border-radius: 10px; object-fit: cover; aspect-ratio: 1/1;"></div>', unsafe_allow_html=True)
-                else:
-                    st.markdown("<div style='text-align: center; font-size: 50px; background:#222; border-radius:10px; padding:10px;'>🎤</div>", unsafe_allow_html=True)
-                
-                # Tampilkan Nama Model
-                if is_selected:
-                    st.markdown(f"<p style='text-align: center; color: #00ff00; font-weight: bold;'>{model_name} ✅</p>", unsafe_allow_html=True)
-                else:
-                    st.markdown(f"<p style='text-align: center;'>{model_name}</p>", unsafe_allow_html=True)
-                    
-                # Tombol Pilih
-                if not is_selected:
-                    if st.button("Pilih", key=f"btn_{model_name}", use_container_width=True):
-                        st.session_state.selected_model = model_name
-                        st.rerun()
-                else:
-                    # Dummy button agar layout rata
-                    st.button("Terpilih", key=f"btn_{model_name}", use_container_width=True, disabled=True)
-                    
-        st.markdown("---")
-        if st.button(f"Load '{st.session_state.selected_model}' ke Mesin", use_container_width=True, type="primary"):
-            with st.spinner("Memuat..."):
+        # Proses Loading Model di awal
+        load_success = False
+        if st.session_state.selected_model and st.session_state.loaded_model != st.session_state.selected_model:
+            with st.spinner(f"Memuat model '{st.session_state.selected_model}' ke Mesin..."):
                 model_folder = os.path.join(MODELS_DIR, st.session_state.selected_model)
                 pth_file = ""
                 index_file = ""
@@ -140,7 +105,58 @@ with left_col:
                     st.error("File .pth tidak ditemukan di dalam folder model!")
                 else:
                     inference_wrapper.load_model(pth_file, index_path=index_file)
-                    st.success("✅ Model Siap!")
+                    st.session_state.loaded_model = st.session_state.selected_model
+                    load_success = True
+        elif st.session_state.loaded_model == st.session_state.selected_model:
+            load_success = True
+
+        # Tampilkan Judul dan Status Aktif berjejer
+        head_col1, head_col2 = st.columns([0.4, 0.6])
+        with head_col1:
+            st.markdown("### Pilih Model:")
+        with head_col2:
+            if load_success:
+                st.markdown(f"<div style='margin-top: 22px;'><span style='background-color: rgba(0, 255, 0, 0.15); color: #00ff00; padding: 6px 12px; border-radius: 6px; font-weight: bold; font-size: 13px;'>✅ '{st.session_state.selected_model}' Aktif & Siap!</span></div>", unsafe_allow_html=True)
+        
+        # Buat grid 5 kolom agar lebih ringkas
+        cols = st.columns(5)
+        for idx, model_name in enumerate(available_models):
+            with cols[idx % 5]:
+                model_folder = os.path.join(MODELS_DIR, model_name)
+                cover_image = None
+                for file in os.listdir(model_folder):
+                    if file.startswith("cover."):
+                        cover_image = os.path.join(model_folder, file)
+                        break
+                
+                is_selected = (st.session_state.selected_model == model_name)
+                
+                # Tampilkan Cover dengan ukuran lebih kecil (70px)
+                if cover_image:
+                    import base64
+                    with open(cover_image, "rb") as f:
+                        b64 = base64.b64encode(f.read()).decode()
+                    ext = cover_image.split('.')[-1]
+                    st.markdown(f'<div style="text-align: center;"><img src="data:image/{ext};base64,{b64}" width="70" style="border-radius: 8px; object-fit: cover; aspect-ratio: 1/1;"></div>', unsafe_allow_html=True)
+                else:
+                    st.markdown("<div style='text-align: center; font-size: 30px; background:#222; border-radius:8px; padding:5px;'>🎤</div>", unsafe_allow_html=True)
+                
+                # Tampilkan Nama Model
+                if is_selected:
+                    st.markdown(f"<p style='text-align: center; color: #00ff00; font-weight: bold; font-size: 12px;'>{model_name[:10]} ✅</p>", unsafe_allow_html=True)
+                else:
+                    st.markdown(f"<p style='text-align: center; font-size: 12px;'>{model_name[:12]}</p>", unsafe_allow_html=True)
+                    
+                # Tombol Pilih
+                if not is_selected:
+                    if st.button("Pilih", key=f"btn_{model_name}", use_container_width=True):
+                        st.session_state.selected_model = model_name
+                        st.rerun()
+                else:
+                    # Dummy button agar layout rata
+                    st.button("Terpilih", key=f"btn_{model_name}", use_container_width=True, disabled=True)
+                    
+        st.markdown("---")
     else:
         st.warning("⚠️ Belum ada model! Silakan tambah model baru di atas.")
 
@@ -156,7 +172,11 @@ with right_col:
             f.write(uploaded_file.getbuffer())
     
     # Atur Pitch
-    pitch = st.slider("Atur Pitch (Semitones)", -24, 24, 0, 1)
+    pitch = st.slider("Atur Pitch (Semitones)", -24, 24, 0, 1, help="Ubah ke +12 jika vokal asli Pria dan model Wanita. Ubah ke -12 jika vokal asli Wanita dan model Pria. Biarkan 0 jika gendernya sama.")
+    
+    with st.expander("🛠️ Pengaturan Lanjutan (Advanced)"):
+        index_rate = st.slider("Index Rate (Pengaruh Aksen Model)", 0.0, 1.0, 0.75, 0.01, help="Turunkan jika hasil suara patah-patah/sember. (Hanya berfungsi jika model memiliki file .index)")
+        protect = st.slider("Protect Voiceless Consonants", 0.0, 0.5, 0.33, 0.01, help="Menjaga suara napas/desis. Naikkan ke 0.5 jika suara napas terdengar seperti robot/elektronik.")
     
     if st.button("🚀 Convert Vokal Sekarang!", use_container_width=True):
         if not st.session_state.get('selected_model'):
@@ -168,7 +188,7 @@ with right_col:
                 output_name = f"Cover_{pitch}_{uploaded_file.name}".rsplit('.', 1)[0] + '.wav'
                 output_path = os.path.join(OUTPUT_DIR, output_name)
                 
-                success, err_msg = inference_wrapper.convert_audio(input_path, output_path, pitch)
+                success, err_msg = inference_wrapper.convert_audio(input_path, output_path, pitch, index_rate, protect)
                 
                 if success and os.path.exists(output_path):
                     st.success("🎉 Selesai!")

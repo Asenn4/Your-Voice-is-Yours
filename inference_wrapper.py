@@ -47,7 +47,7 @@ def load_model(model_path, index_path=""):
     version = get_model_version(model_path)
     rvc.load_model(model_path, version=version, index_path=index_path)
 
-def convert_audio(input_audio_path, output_audio_path, pitch=0):
+def convert_audio(input_audio_path, output_audio_path, pitch=0, index_rate=None, protect=0.33):
     """
     Mengubah audio menggunakan model RVC yang sudah dimuat.
     pitch: Integer semitones (+12 naik satu oktaf, -12 turun satu oktaf)
@@ -58,7 +58,7 @@ def convert_audio(input_audio_path, output_audio_path, pitch=0):
         if rvc.current_model:
             model_info = rvc.models.get(rvc.current_model, {})
             if model_info.get("index"):
-                idx_rate = 0.75
+                idx_rate = index_rate if index_rate is not None else 0.75
 
         rvc.set_params(
             f0up_key=pitch,
@@ -67,7 +67,7 @@ def convert_audio(input_audio_path, output_audio_path, pitch=0):
             filter_radius=3,
             resample_sr=0,
             rms_mix_rate=0.25,
-            protect=0.33
+            protect=protect
         )
         rvc.infer_file(input_path=input_audio_path, output_path=output_audio_path)
         return True, ""
